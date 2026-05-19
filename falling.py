@@ -20,11 +20,6 @@ btn_pin = machine.Pin(21, machine.Pin.IN, machine.Pin.PULL_UP)
 sw_c_pin = machine.Pin(5, machine.Pin.IN, machine.Pin.PULL_UP)
 ang_a_pin = machine.Pin(18, machine.Pin.IN, machine.Pin.PULL_UP)
 ang_b_pin = machine.Pin(17, machine.Pin.IN, machine.Pin.PULL_UP)
-counter = 0
-
-# Previous state of the encoder
-prev_a = ang_a_pin.value()
-prev_b = ang_b_pin.value()
 
 # Game variables
 catcher_x = 64
@@ -35,7 +30,20 @@ falling_object_x = 0
 falling_object_y = 0
 
 # Rotary encoder state
-last_a = ang_a_pin.value()
+encoder_prev_state = (ang_a_pin.value() << 1) | ang_b_pin.value()
+encoder_accum = 0
+
+# Valid quadrature transitions mapped to movement deltas.
+ENCODER_DELTA = {
+    0b0001: -1,
+    0b0111: -1,
+    0b1110: -1,
+    0b1000: -1,
+    0b0010: 1,
+    0b1011: 1,
+    0b1101: 1,
+    0b0100: 1,
+}
 
 # Game state
 game_state = 'welcome'  # 'welcome' or 'playing'
@@ -43,6 +51,15 @@ game_state = 'welcome'  # 'welcome' or 'playing'
 # Triple-press detection
 last_press_time = 0
 press_count = 0
+
+def is_start_button_pressed():
+    """Accept either the dedicated button or encoder center click as start/exit input."""
+    return (btn_pin.value() == 0) or (sw_c_pin.value() == 0)
+
+def wait_for_button_release():
+    """Block until both buttons are released to avoid repeated triggers."""
+    while is_start_button_pressed():
+        time.sleep_ms(5)
 
 def reset_game():
     """Resets the game variables to their initial state."""
@@ -53,20 +70,27 @@ def reset_game():
     falling_object_y = 0
     catcher_x = 64
 
-def encoder_interrupt(pin):
-    global catcher_x, last_a
-    current_a = ang_a_pin.value()
-    if current_a != last_a:
-        if ang_b_pin.value() != current_a:
-            # Counter-clockwise
-            catcher_x = max(catcher_width // 2, min(127 - catcher_width // 2, catcher_x + 5))
-        else:
-            # Clockwise
-            catcher_x = max(catcher_width // 2, min(127 - catcher_width // 2, catcher_x - 5))
-        last_a = current_a
+def update_encoder():
+    global catcher_x, encoder_prev_state, encoder_accum
+    current_state = (ang_a_pin.value() << 1) | ang_b_pin.value()
+    transition = (encoder_prev_state << 2) | current_state
+    delta = ENCODER_DELTA.get(transition, 0)
+    moved = False
 
-# Attach interrupt to pin A
-ang_a_pin.irq(trigger=machine.Pin.IRQ_RISING | machine.Pin.IRQ_FALLING, handler=encoder_interrupt)
+    if delta:
+        encoder_accum += delta
+        # Most encoders generate 4 transitions per detent.
+        if encoder_accum >= 4:
+            catcher_x = max(catcher_width // 2, min(127 - catcher_width // 2, catcher_x + 5))
+            encoder_accum = 0
+            moved = True
+        elif encoder_accum <= -4:
+            catcher_x = max(catcher_width // 2, min(127 - catcher_width // 2, catcher_x - 5))
+            encoder_accum = 0
+            moved = True
+
+    encoder_prev_state = current_state
+    return moved
 
 def draw_welcome_screen():
     oled.fill(0)
@@ -86,19 +110,28 @@ def draw_game():
     oled.show()
 
 reset_game()
+last_fall_time = time.ticks_ms()
 
 while True:
     if game_state == 'welcome':
         draw_welcome_screen()
-        if not btn_pin.value():
+        if is_start_button_pressed():
+            time.sleep_ms(30)
+            if not is_start_button_pressed():
+                continue
             reset_game()
             game_state = 'playing'
-            time.sleep(0.2)  # Debounce
+            wait_for_button_release()
     
     elif game_state == 'playing':
+        moved_catcher = update_encoder()
+
         # Check for button press (for exiting)
         current_time = time.ticks_ms()
-        if not btn_pin.value():
+        if is_start_button_pressed():
+            time.sleep_ms(30)
+            if not is_start_button_pressed():
+                continue
             if time.ticks_diff(current_time, last_press_time) > 300:
                 press_count = 1
             else:
@@ -109,22 +142,28 @@ while True:
                 game_state = 'welcome'
                 press_count = 0
             
-            while not btn_pin.value():
-                pass  # Wait for release
+            wait_for_button_release()
 
-        # Move the falling object down
-        falling_object_y += level
+        frame_due = False
+        if time.ticks_diff(current_time, last_fall_time) >= 100:
+            frame_due = True
+            last_fall_time = current_time
 
-        # Check for catch or miss
-        if falling_object_y >= 60:
-            if abs(falling_object_x - catcher_x) <= catcher_width // 2:
-                score += 1
-            else:
-                score = 0
-            level = score // 5 + 1
-            falling_object_x = random.randint(0, 127)
-            falling_object_y = 0
+            # Move the falling object down on a fixed interval.
+            falling_object_y += level
 
-        draw_game()
-        time.sleep(0.1)
+            # Check for catch or miss
+            if falling_object_y >= 60:
+                if abs(falling_object_x - catcher_x) <= catcher_width // 2:
+                    score += 1
+                else:
+                    score = 0
+                level = score // 5 + 1
+                falling_object_x = random.randint(0, 127)
+                falling_object_y = 0
+
+        if moved_catcher or frame_due:
+            draw_game()
+
+        time.sleep_ms(5)
 
