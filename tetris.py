@@ -26,7 +26,7 @@ ang_a_pin = machine.Pin(18, machine.Pin.IN, machine.Pin.PULL_UP)
 ang_b_pin = machine.Pin(17, machine.Pin.IN, machine.Pin.PULL_UP)
 
 # Game variables
-grid_width = 15
+grid_width = 10
 grid_height = 15
 cell_size = 4
 grid = [[0 for _ in range(grid_width)] for _ in range(grid_height)]
@@ -65,7 +65,7 @@ SHAPES = [
 ]
 
 # Game state
-game_state = 'playing'  # 'welcome' or 'playing'
+game_state = 'welcome'  # 'welcome' or 'playing'
 last_fall_time = 0
 
 # Triple-press detection
@@ -227,77 +227,6 @@ def clear_lines():
         score += (10 * lines_cleared) * level
         level = score // 50 + 1
         grid = new_grid
-
-def reset_game():
-    """Resets the game variables to their initial state."""
-    global score, level, current_piece, current_x, current_y, grid
-    score = 0
-    level = 1
-    current_piece = None
-    current_x = 0
-    current_y = 0
-    grid = [[0 for _ in range(grid_width)] for _ in range(grid_height)]
-    new_piece()
-
-def draw_grid():
-    """Draws the game grid and current piece on the OLED display."""
-    oled.fill(0)
-    # Draw a border around the grid
-    oled.rect(0, 0, grid_width * cell_size + 2, grid_height * cell_size + 2, 1)
-    # Draw the grid
-    for y in range(grid_height):
-        for x in range(grid_width):
-            if grid[y][x]:
-                oled.fill_rect(x * cell_size, y * cell_size, cell_size, cell_size, 1)
-    # Draw the current piece
-    if current_piece:
-        for y in range(4):
-            for x in range(4):
-                if current_piece[y][x]:
-                    oled.fill_rect((current_x + x) * cell_size, (current_y + y) * cell_size, cell_size, cell_size, 1)
-    # Draw score and level
-    oled.text(f'Score:{score}', 70, 0)
-    oled.text(f'Level:{level}', 70, 10)
-    oled.text('Next:', 70, 20)
-    if next_piece:
-        for y in range(4):
-            for x in range(4):
-                if next_piece[y][x]:
-                    oled.fill_rect(70 + x * cell_size, 30 + y * cell_size, cell_size, cell_size, 1)
-    oled.show()
-
-def update_encoder():
-    global current_x, encoder_prev_state, encoder_accum
-    current_state = (ang_a_pin.value() << 1) | ang_b_pin.value()
-    transition = (encoder_prev_state << 2) | current_state
-    delta = ENCODER_DELTA.get(transition, 0)
-    moved = False
-
-    if delta:
-        encoder_accum += delta
-        # Most encoders generate 4 transitions per detent.
-        if abs(encoder_accum) >= 4:
-            move_steps = encoder_accum // 4
-            new_x = current_x + move_steps
-            if not check_collision(current_piece, new_x, current_y):
-                current_x = new_x
-                moved = True
-            encoder_accum -= move_steps * 4
-            
-    encoder_prev_state = current_state
-    return moved
-
-def draw_welcome_screen():
-    oled.fill(0)
-    oled.text('Tetris Game', 15, 20)
-    oled.text('Press to Start', 10, 40)
-    oled.show()
-
-def draw_game_over_screen():
-    oled.fill(0)
-    oled.text('Game Over', 25, 20)
-    oled.text(f'Score: {score}', 10, 40)
-    oled.show()
 
 reset_game()
 
