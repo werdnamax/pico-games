@@ -40,6 +40,8 @@ next_piece = None
 # Rotary encoder state
 encoder_prev_state = (ang_a_pin.value() << 1) | ang_b_pin.value()
 encoder_accum = 0
+encoder_steps = 0
+encoder_last_irq_time = 0
 
 # Valid quadrature transitions mapped to movement deltas.
 ENCODER_DELTA = {
@@ -52,6 +54,27 @@ ENCODER_DELTA = {
     0b1101: 1,
     0b0100: 1,
 }
+
+def _encoder_irq(pin):
+    global encoder_prev_state, encoder_accum, encoder_steps, encoder_last_irq_time
+    now = time.ticks_ms()
+    if time.ticks_diff(now, encoder_last_irq_time) < 1:
+        return
+
+    current_state = (ang_a_pin.value() << 1) | ang_b_pin.value()
+    transition = (encoder_prev_state << 2) | current_state
+    delta = ENCODER_DELTA.get(transition, 0)
+
+    if delta:
+        encoder_accum += delta
+        # Most encoders generate 4 transitions per detent.
+        if abs(encoder_accum) >= 4:
+            move_steps = encoder_accum // 4
+            encoder_steps += move_steps
+            encoder_accum -= move_steps * 4
+
+    encoder_prev_state = current_state
+    encoder_last_irq_time = now
 
 # Tetromino shapes
 SHAPES = [
@@ -68,16 +91,39 @@ SHAPES = [
 game_state = 'welcome'  # 'welcome' or 'playing'
 last_fall_time = 0
 
-# Triple-press detection
-last_press_time = 0
-press_count = 0
+# Button edge tracking
+start_button_was_pressed = False
+rotate_button_was_pressed = False
+start_button_last_change = 0
+rotate_button_last_change = 0
+
 def is_start_button_pressed():
     """Accept either the dedicated button or encoder center click as start/exit input."""
     return (btn_pin.value() == 0) or (sw_c_pin.value() == 0)
-def wait_for_button_release():
-    """Block until both buttons are released to avoid repeated triggers."""
-    while is_start_button_pressed():
-        time.sleep_ms(5)
+
+def start_button_just_pressed(now):
+    global start_button_was_pressed, start_button_last_change
+    pressed = is_start_button_pressed()
+    if pressed and not start_button_was_pressed and time.ticks_diff(now, start_button_last_change) > 150:
+        start_button_was_pressed = True
+        start_button_last_change = now
+        return True
+    if not pressed and start_button_was_pressed:
+        start_button_was_pressed = False
+        start_button_last_change = now
+    return False
+
+def rotate_button_just_pressed(now):
+    global rotate_button_was_pressed, rotate_button_last_change
+    pressed = sw_c_pin.value() == 0
+    if pressed and not rotate_button_was_pressed and time.ticks_diff(now, rotate_button_last_change) > 150:
+        rotate_button_was_pressed = True
+        rotate_button_last_change = now
+        return True
+    if not pressed and rotate_button_was_pressed:
+        rotate_button_was_pressed = False
+        rotate_button_last_change = now
+    return False
 
 def reset_game():
     """Resets the game variables to their initial state."""
@@ -118,24 +164,17 @@ def draw_grid():
     oled.show()
 
 def update_encoder():
-    global current_x, encoder_prev_state, encoder_accum
-    current_state = (ang_a_pin.value() << 1) | ang_b_pin.value()
-    transition = (encoder_prev_state << 2) | current_state
-    delta = ENCODER_DELTA.get(transition, 0)
+    global current_x, encoder_steps
     moved = False
 
-    if delta:
-        encoder_accum += delta
-        # Most encoders generate 4 transitions per detent.
-        if abs(encoder_accum) >= 4:
-            move_steps = encoder_accum // 4
-            new_x = current_x + move_steps
-            if not check_collision(current_piece, new_x, current_y):
-                current_x = new_x
-                moved = True
-            encoder_accum -= move_steps * 4
-            
-    encoder_prev_state = current_state
+    if encoder_steps:
+        move_steps = encoder_steps
+        encoder_steps = 0
+        new_x = current_x + move_steps
+        if not check_collision(current_piece, new_x, current_y):
+            current_x = new_x
+            moved = True
+
     return moved
 
 def draw_welcome_screen():
@@ -230,48 +269,44 @@ def clear_lines():
 
 reset_game()
 
+ang_a_pin.irq(trigger=machine.Pin.IRQ_RISING | machine.Pin.IRQ_FALLING, handler=_encoder_irq)
+ang_b_pin.irq(trigger=machine.Pin.IRQ_RISING | machine.Pin.IRQ_FALLING, handler=_encoder_irq)
+
 while True:
+    loop_now = time.ticks_ms()
     if game_state == 'welcome':
         draw_welcome_screen()
-        if is_start_button_pressed():
-            time.sleep_ms(30)
-            if not is_start_button_pressed():
-                continue
+        if start_button_just_pressed(loop_now):
             reset_game()
             game_state = 'playing'
-            wait_for_button_release()
     elif game_state == 'playing':
         moved = update_encoder()
         
         # Handle rotation
-        if sw_c_pin.value() == 0:
+        if rotate_button_just_pressed(loop_now):
             rotated = rotate_piece(current_piece)
             if not check_collision(rotated, current_x, current_y):
                 current_piece = rotated
                 moved = True
-            while sw_c_pin.value() == 0:
-                time.sleep_ms(10)
 
         # Gravity
         fall_speed = max(100, 500 - (level - 1) * 50)
-        current_time = time.ticks_ms()
-        if time.ticks_diff(current_time, last_fall_time) > fall_speed:
+        if time.ticks_diff(loop_now, last_fall_time) > fall_speed:
             if not check_collision(current_piece, current_x, current_y + 1):
                 current_y += 1
             else:
                 lock_piece()
                 new_piece()
-            last_fall_time = current_time
+            last_fall_time = loop_now
             moved = True
 
         if moved:
             draw_grid()
         
-        time.sleep_ms(10)
+        time.sleep_ms(1)
 
     elif game_state == 'game_over':
         draw_game_over_screen()
-        if is_start_button_pressed():
-            wait_for_button_release()
+        if start_button_just_pressed(loop_now):
             reset_game()
             game_state = 'playing'
