@@ -153,9 +153,9 @@ def draw_grid():
                 if current_piece[y][x]:
                     oled.fill_rect((current_x + x) * cell_size, (current_y + y) * cell_size, cell_size, cell_size, 1)
     # Draw score and level
-    oled.text(f'Score:{score}', 70, 0)
-    oled.text(f'Level:{level}', 70, 10)
-    oled.text('Next:', 70, 20)
+    oled.text(f'Score:{score}', 60, 0)
+    oled.text(f'Level:{level}', 60, 10)
+    oled.text('Next:', 60, 20)
     if next_piece:
         for y in range(4):
             for x in range(4):
