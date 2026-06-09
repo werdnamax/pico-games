@@ -35,7 +35,7 @@ The pin assignments in the game are defined in `tetris.py` and should match your
 
 If your Pico is not already running MicroPython, flash the included UF2 file:
 
-1. Hold the BOOTSEL button while plugging in the Pico.
+1. Hold the BOOTSEL button and rest while plugging in the Pico. Then release the reset button. The Pico should mount as a USB drive on your computer.
 2. Copy `RPI_PICO-20260409-v1.29.0-preview.32.g8c6dfa5bd4.uf2` onto the mounted Pico drive.
 3. The board will reboot into MicroPython after the file finishes copying.
 
@@ -45,22 +45,33 @@ Use the Pico / Pico-vscode extension in VS Code to connect your editor to the bo
 
 Typical workflow:
 
-1. Open the Pico commands in VS Code.
-2. Use the Window to Pico connect option to connect to the board.
-3. Upload `tetris.py` to the Pico filesystem.
-4. Open a REPL or run the file from the extension.
+1. Open the Pico commands in VS Code. (press `Ctrl+Shift+P` and search for "Pico")
+2. Use the Window to Pico connect option to connect to the board. Select the opetion that says "MicroPico: Connect" 
+3. Some green text should appear in the terminal indicating a successful connection.
 
 If you prefer, you can also copy the file directly to the Pico and rename it to `main.py` so it starts automatically after boot.
 
-### 3. Run the game
+### 3. Install the SSD1306 driver
 
-Once the Pico is connected and the file is on the board, run `tetris.py` from the extension or execute it from the MicroPython REPL.
+using the Pico extension, upload `ssd1306.py` to the Pico filesystem if it's not already there. This driver is required for the OLED display to work.
+
+* With the Pico connected, right-click on `ssd1306.py` in the VS Code file explorer and select "Upload to Pico". This will copy the file to the board's filesystem.
+* alternatively, you can use the Pico REPL to copy the file contents and create it directly on the board.
+* Note that unless you delete the file after uploading, it will remain on the Pico and be available for future use.
+
+### 4. Run the game
+
+Once the Pico is connected and the driver is installed, you can run `tetris.py`: 
+1. Open `tetris.py` in VS Code.
+2. With the Pico connected, right-click on `tetris.py` and select "Run on Pico". This will execute the game on the board and you should see it start on the OLED display. Or you can click the "Run" button in the top left of the editor window while `tetris.py` is open and the Pico is connected.
 
 ## Files
 
 - `tetris.py` - Tetris game for the Pico
 - `falling.py` - another game/example in this repo
 - `examples/` - simple hardware examples for the board and peripherals
+- `RPI_PICO-20260409-v1.29.0-preview.32.g8c6dfa5bd4.uf2` - MicroPython firmware for the Pico
+- `ssd1306.py` - MicroPython driver for the SSD1306 OLED display
 
 ## Notes
 
