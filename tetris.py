@@ -29,6 +29,8 @@ ang_b_pin = machine.Pin(17, machine.Pin.IN, machine.Pin.PULL_UP)
 grid_width = 10
 grid_height = 15
 cell_size = 4
+block_inset = 1
+block_size = cell_size - 1
 grid = [[0 for _ in range(grid_width)] for _ in range(grid_height)]
 current_piece = None
 current_x = 0
@@ -139,28 +141,32 @@ def reset_game():
 def draw_grid():
     """Draws the game grid and current piece on the OLED display."""
     oled.fill(0)
+
+    def draw_block(px, py):
+        oled.fill_rect(px * cell_size + block_inset, py * cell_size + block_inset, block_size, block_size, 1)
+
     # Draw a border around the grid
     oled.rect(0, 0, grid_width * cell_size + 2, grid_height * cell_size + 2, 1)
     # Draw the grid
     for y in range(grid_height):
         for x in range(grid_width):
             if grid[y][x]:
-                oled.fill_rect(x * cell_size, y * cell_size, cell_size, cell_size, 1)
+                draw_block(x, y)
     # Draw the current piece
     if current_piece:
         for y in range(4):
             for x in range(4):
                 if current_piece[y][x]:
-                    oled.fill_rect((current_x + x) * cell_size, (current_y + y) * cell_size, cell_size, cell_size, 1)
+                    draw_block(current_x + x, current_y + y)
     # Draw score and level
-    oled.text(f'Score:{score}', 60, 0)
-    oled.text(f'Level:{level}', 60, 10)
-    oled.text('Next:', 60, 20)
+    oled.text(f'Score:{score}', 55, 0)
+    oled.text(f'Level:{level}', 55, 16)
+    oled.text('Next:', 55, 26)
     if next_piece:
         for y in range(4):
             for x in range(4):
                 if next_piece[y][x]:
-                    oled.fill_rect(70 + x * cell_size, 30 + y * cell_size, cell_size, cell_size, 1)
+                    oled.fill_rect(55 + x * cell_size + block_inset, 40 + y * cell_size + block_inset, block_size, block_size, 1)
     oled.show()
 
 def update_encoder():
