@@ -78,3 +78,8 @@ Once the Pico is connected and the driver is installed, you can run `tetris.py`:
 - Make sure the OLED wiring matches the I2C pins configured in `tetris.py`.
 - If the game does not start, check that the `ssd1306` module is installed on the Pico.
 - If the controls move the wrong direction, verify the encoder wiring and pin mapping.
+
+For more information on the hardware of the walla walla board see the Walla Walla University intro to CAD course materials.
+Github: https://github.com/frohro/Intro-to-CAD-2026.git
+
+For a more detailed hardware analysis see [Hardware.md](./hardware.md) in this repository.
